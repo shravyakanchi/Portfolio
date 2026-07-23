@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>StudyBuddy AI — AIML-500 Lab Assistant</title>
+<style>
+  :root{
+    --bg:#0f1220; --panel:#171b2e; --accent:#6c8cff; --accent2:#34d399;
+    --txt:#e8ecff; --muted:#9aa3c7; --bubble:#20253c; --user:#2b3a8f;
+  }
+  *{box-sizing:border-box;font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
+  body{margin:0;background:linear-gradient(160deg,#0f1220,#131a33);color:var(--txt);min-height:100vh;display:flex;flex-direction:column;align-items:center}
+  header{padding:18px 20px 8px;text-align:center}
+  header h1{margin:0;font-size:1.4rem;letter-spacing:.5px}
+  header p{margin:4px 0 0;color:var(--muted);font-size:.85rem}
+  .wrap{width:min(820px,94vw);background:var(--panel);border:1px solid #2a3157;border-radius:16px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.45);margin:14px 0 30px;display:flex;flex-direction:column;height:78vh}
+  .bar{display:flex;gap:8px;padding:10px 12px;background:#12162a;border-bottom:1px solid #2a3157;align-items:center;flex-wrap:wrap}
+  .bar small{color:var(--muted)}
+  .bar input{flex:1;min-width:160px;background:#0c1020;border:1px solid #2a3157;color:var(--txt);border-radius:8px;padding:7px 9px;font-size:.8rem}
+  .bar button{background:#22304f;color:var(--txt);border:1px solid #2a3157;border-radius:8px;padding:7px 10px;font-size:.8rem;cursor:pointer}
+  .bar button:hover{background:#2c3d63}
+  #log{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:12px}
+  .msg{max-width:80%;padding:10px 13px;border-radius:14px;line-height:1.45;font-size:.92rem;white-space:pre-wrap}
+  .bot{background:var(--bubble);align-self:flex-start;border-bottom-left-radius:4px}
+  .you{background:var(--user);align-self:flex-end;border-bottom-right-radius:4px}
+  .tag{font-size:.68rem;color:var(--accent2);margin-bottom:3px;display:block;font-weight:600;letter-spacing:.4px}
+  form{display:flex;gap:8px;padding:12px;border-top:1px solid #2a3157;background:#12162a}
+  form input{flex:1;background:#0c1020;border:1px solid #2a3157;color:var(--txt);border-radius:10px;padding:11px;font-size:.95rem}
+  form button{background:var(--accent);color:#0b1020;border:none;border-radius:10px;padding:0 18px;font-weight:700;cursor:pointer}
+  form button:hover{filter:brightness(1.08)}
+  .hint{font-size:.72rem;color:var(--muted);text-align:center;padding-bottom:18px}
+  code{background:#0c1020;padding:1px 5px;border-radius:4px;color:var(--accent2)}
+</style>
+</head>
+<body>
+<header>
+  <h1>🤖 StudyBuddy AI</h1>
+  <p>AIML-500 AI Lab — a chatbot built with Design Thinking (Empathy → Define → Ideate → Prototype → Test)</p>
+</header>
+
+<div class="wrap">
+  <div class="bar">
+    <small>Mode:</small>
+    <input id="apikey" placeholder="(optional) paste an OpenAI key to upgrade to live GPT" />
+    <button id="clearBtn">Clear chat</button>
+  </div>
+  <div id="log"></div>
+  <form id="chat">
+    <input id="msg" placeholder="Ask me about the AI Lab, Design Thinking, or your coursework…" autocomplete="off" />
+    <button type="submit">Send</button>
+  </form>
+</div>
+<p class="hint">Built for AIML-500 submission. Default mode runs fully offline (no key needed). Add an OpenAI key above for live responses.</p>
+
+<script>
+/* ===========================================================
+   StudyBuddy AI — offline knowledge brain
+   Implements a small intent + keyword retrieval engine so the
+   bot genuinely responds without any external API.
+   =========================================================== */
+const BRAIN = [
+  { k:["hello","hi","hey","greet"], a:"Hi! I'm StudyBuddy AI, built for the AIML-500 AI Lab. Ask me about the lab, Design Thinking, or your coursework. How can I help you today?" },
+  { k:["design thinking","empathy","define","ideate","prototype","test"], a:"Design Thinking is a 5-phase, human-centered process we used to build this bot:\n\n1) Empathy — understand the user's needs (students juggling coursework).\n2) Define — frame the problem (info overload, weak study support).\n3) Ideate — brainstorm AI solutions (a study assistant).\n4) Prototype — build a working chatbot (this one!).\n5) Test — try it, tune it, iterate.\n\nWhich phase do you want to explore?" },
+  { k:["ai lab","lab","assignment","submit","documentation"], a:"The AI Lab (AIML-500) asks you to:\n• Practice with an LLM (test prompts in 3 chats).\n• Try a custom GPT.\n• Use a research assistant (STORM AI).\n• Build an AI chatbot/assistant with Design Thinking.\n• Submit (1) a LINK to your bot and (2) your DOCUMENTATION of the whole lab.\n\nI'm the bot you built — the link to this page is your submission link." },
+  { k:["storm","research","article"], a:"STORM AI (https://storm.genie.stanford.edu) is a research assistant that drafts Wikipedia-style articles. It brainstorms perspectives, gathers sources, and outlines an article. In the lab you research a topic you already know, watch its brainstorming, then describe how it works." },
+  { k:["gpt","custom gpt","chatgpt"], a:"Custom GPTs (OpenAI) let you make a specialized assistant by giving it instructions and capabilities — no coding required. In the lab you chat with one, ask it to change something, add your opinion, ask 'what if', and have it summarize the conversation." },
+  { k:["llm","prompt","prompting"], a:"An LLM (Large Language Model) generates text from prompts. Good prompts use a framework:\n• Context — who/what/when\n• Task — what you want\n• Constraints — format, length, tone\n\nThe lab has you run ONE prompt in 3 separate chats and compare outputs — models aren't perfectly deterministic, so results vary." },
+  { k:["chatbase","mizou","tool","build tool"], a:"The lab suggests three build tools:\n• Chatbase.co (free) — upload knowledge, get a shareable bot.\n• Mizou.com (free) — build conversational assistants.\n• ChatGPT (paid) — custom GPTs.\n\nThis bot is a self-contained prototype you can open and submit as evidence." },
+  { k:["bias","fairness","ethics","responsible","privacy"], a:"Responsible AI means designing for fairness, transparency, privacy, and bias mitigation. In the Empathy and Test phases we consider who is affected and monitor for unintended consequences. Always read a tool's Privacy Statement & Terms of Use before building (the lab asks you to list what you learn)."},
+  { k:["help","what can you","who are you"], a:"I'm StudyBuddy AI — a study & lab assistant for AIML-500. I can explain the AI Lab steps, Design Thinking, LLMs, custom GPTs, STORM, and the suggested build tools. I run offline by default; add an OpenAI key for live answers." },
+  { k:["study","exam","stress","overwhelm","tired"], a:"Totally fair — coursework piles up. Let's break it down: pick ONE task, set a 25-min timer, then a 5-min break (Pomodoro). Want me to help you outline your AI Lab documentation step by step?" },
+  { k:["plan","scenario","test the bot","parameter"], a:"A good test plan covers each rule you gave the bot:\n• Greeting & tone\n• Answering lab questions correctly\n• Handling 'I don't know'\n• Staying on-topic (study/lab)\n• Asking a clarifying question when vague\n\nTry: 'Explain Design Thinking in 3 bullets' and 'who are you?' to see two behaviors." }
+];
+
+function offlineReply(text){
+  const t = text.toLowerCase();
+  let best=null, bestScore=0;
+  for(const item of BRAIN){
+    let score=0;
+    for(const kw of item.k){
+      if(t.includes(kw)) score += kw.length; // longer keyword = stronger match
+    }
+    if(score>bestScore){bestScore=score;best=item;}
+  }
+  if(best && bestScore>0) return best.a;
+  // fallback: empathetic, on-topic helper
+  return "I'm not 100% sure about that one, but I'm here to help with the AIML-500 AI Lab. "+
+         "Could you rephrase, or ask about Design Thinking, LLMs, custom GPTs, STORM, or the build tools? "+
+         "If you pasted an OpenAI key above, I can give a live answer instead.";
+}
+
+const log = document.getElementById('log');
+function addMsg(who, text, tag){
+  const d=document.createElement('div');
+  d.className='msg '+(who==='you'?'you':'bot');
+  if(tag) d.innerHTML='<span class="tag">'+tag+'</span>'+escapeHtml(text);
+  else d.textContent=text;
+  log.appendChild(d);
+  log.scrollTop=log.scrollHeight;
+}
+function escapeHtml(s){return s.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+
+async function send(){
+  const input=document.getElementById('msg');
+  const text=input.value.trim();
+  if(!text) return;
+  addMsg('you',text);
+  input.value='';
+
+  const key=document.getElementById('apikey').value.trim();
+  if(key){
+    addMsg('bot','Thinking with live GPT…','LIVE');
+    try{
+      const r=await fetch('https://api.openai.com/v1/chat/completions',{
+        method:'POST',
+        headers:{'Content-Type':'application/json','Authorization':'Bearer '+key},
+        body:JSON.stringify({model:'gpt-3.5-turbo',messages:[
+          {role:'system',content:'You are StudyBuddy AI, a helpful study assistant for the AIML-500 AI Lab.'},
+          {role:'user',content:text}
+        ]})
+      });
+      const j=await r.json();
+      addMsg('bot', j.choices?.[0]?.message?.content || 'No response from API.', 'LIVE');
+    }catch(e){ addMsg('bot','Live call failed (check key/network). Falling back:\n\n'+offlineReply(text),'OFFLINE'); }
+  }else{
+    setTimeout(()=>addMsg('bot', offlineReply(text),'OFFLINE'), 350);
+  }
+}
+
+document.getElementById('chat').addEventListener('submit',e=>{e.preventDefault();send();});
+document.getElementById('clearBtn').addEventListener('click',()=>{log.innerHTML='';addMsg('bot','Chat cleared. Ask me anything about the AI Lab!','OFFLINE');});
+
+// welcome
+addMsg('bot','👋 Welcome to StudyBuddy AI — your AIML-500 lab assistant.\n\nTry:\n• "What is Design Thinking?"\n• "How do I submit the lab?"\n• "Explain STORM AI"\n\nI run offline by default. Paste an OpenAI key above for live GPT answers.','OFFLINE');
+</script>
+</body>
+</html>
